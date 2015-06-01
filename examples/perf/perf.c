@@ -183,7 +183,7 @@ void insert_into_perf(CassSession* session, const char* query, const CassPrepare
   int i;
   CassFuture* futures[NUM_CONCURRENT_REQUESTS];
 
-  CassCollection* collection = cass_collection_new(session, CASS_COLLECTION_TYPE_SET, 2);
+  CassCollection* collection = cass_collection_new(session, CASS_COLLECTION_TYPE_SET);
   cass_collection_append_string(collection, "jazz");
   cass_collection_append_string(collection, "2013");
 

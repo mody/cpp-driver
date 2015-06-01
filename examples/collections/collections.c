@@ -90,7 +90,7 @@ CassError insert_into_collections(CassSession* session, const char* key, const c
 
   cass_statement_bind_string(statement, 0, key);
 
-  collection = cass_collection_new(session, CASS_COLLECTION_TYPE_SET, 2);
+  collection = cass_collection_new(session, CASS_COLLECTION_TYPE_SET);
   for (item = items; *item; item++) {
     cass_collection_append_string(collection, *item);
   }

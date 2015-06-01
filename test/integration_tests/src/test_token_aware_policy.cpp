@@ -273,7 +273,7 @@ BOOST_AUTO_TEST_CASE(single_entry_routing_key)
 
   test_utils::CassStatementPtr statement(cass_prepared_bind(prepared.get()));
   
-  CassCollection* collection = cass_collection_new(session.get(), CASS_COLLECTION_TYPE_MAP, 0);
+  CassCollection* collection = cass_collection_new(session.get(), CASS_COLLECTION_TYPE_MAP);
   cass_statement_bind_collection(statement.get(), 0, collection);
   cass_statement_bind_string(statement.get(), 1, "cassandra cpp-driver");
 

@@ -32,11 +32,13 @@
 
 namespace cass {
 
+class UserTypeValue;
+
 class Collection {
 public:
   Collection(int protocol_version,
              CassCollectionType type,
-             size_t item_count)
+             size_t item_count = 8)
     : protocol_version_(protocol_version)
     , type_(type)
     , data_type_(new CollectionType(static_cast<CassValueType>(type))) {
@@ -68,6 +70,7 @@ public:
 #undef APPEND_TYPE
 
   CassError append(const Collection* value);
+  CassError append(const UserTypeValue* value);
 
   size_t get_items_size() const;
   void encode_items(char* buf) const;

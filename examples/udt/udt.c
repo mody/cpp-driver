@@ -32,10 +32,7 @@
 
 #include "cassandra.h"
 
-typedef struct Pair_ {
-  const char* key;
-  cass_int32_t value;
-} Pair;
+CassUuidGen* uuid_gen;
 
 void print_error(CassFuture* future) {
   const char* message;
@@ -83,25 +80,30 @@ CassError execute_query(CassSession* session, const char* query) {
   return rc;
 }
 
-CassError insert_into_maps(CassSession* session, const char* key, const Pair items[]) {
+CassError insert_into_udt(CassSession* session) {
   CassError rc = CASS_OK;
   CassStatement* statement = NULL;
   CassFuture* future = NULL;
-  CassCollection* collection = NULL;
-  const Pair* item = NULL;
-  const char* query = "INSERT INTO examples.maps (key, items) VALUES (?, ?);";
+
+  CassUuid id;
+  char id_str[CASS_UUID_STRING_LENGTH];
+  CassUserType* item = NULL;
+
+  const char* query = "INSERT INTO examples.udt (id, item) VALUES (?, ?)";
 
   statement = cass_statement_new(session, query, 2);
 
-  cass_statement_bind_string(statement, 0, key);
+  cass_uuid_gen_time(uuid_gen, &id);
+  cass_uuid_string(id, id_str);
 
-  collection = cass_collection_new(session, CASS_COLLECTION_TYPE_MAP);
-  for (item = items; item->key; item++) {
-    cass_collection_append_string(collection, item->key);
-    cass_collection_append_int32(collection, item->value);
-  }
-  cass_statement_bind_collection(statement, 1, collection);
-  cass_collection_free(collection);
+  item = cass_user_type_new_from_schema(session, "examples", "item");
+
+  cass_user_type_set_string_by_name(item, "street", id_str);
+  cass_user_type_set_string_by_name(item, "city", id_str);
+  cass_user_type_set_int32_by_name(item, "zip", (cass_int32_t)id.time_and_version);
+
+  cass_statement_bind_uuid(statement, 0, id);
+  cass_statement_bind_user_type(statement, 1, item);
 
   future = cass_session_execute(session, statement);
   cass_future_wait(future);
@@ -113,19 +115,19 @@ CassError insert_into_maps(CassSession* session, const char* key, const Pair ite
 
   cass_future_free(future);
   cass_statement_free(statement);
+  cass_user_type_free(item);
 
   return rc;
 }
 
-CassError select_from_maps(CassSession* session, const char* key) {
+CassError select_from_udt(CassSession* session) {
   CassError rc = CASS_OK;
   CassStatement* statement = NULL;
   CassFuture* future = NULL;
-  const char* query = "SELECT items FROM examples.maps WHERE key = ?";
 
-  statement = cass_statement_new(session, query, 1);
+  const char* query = "SELECT * FROM examples.udt";
 
-  cass_statement_bind_string(statement, 0, key);
+  statement = cass_statement_new(session, query, 0);
 
   future = cass_session_execute(session, statement);
   cass_future_wait(future);
@@ -134,27 +136,52 @@ CassError select_from_maps(CassSession* session, const char* key) {
   if (rc != CASS_OK) {
     print_error(future);
   } else {
-    const CassResult* result = cass_future_get_result(future);
+    const CassResult* result = NULL;
+    CassIterator* rows = NULL;
 
-    if (cass_result_row_count(result) > 0) {
-      const CassRow* row = cass_result_first_row(result);
+    result = cass_future_get_result(future);
+    rows = cass_iterator_from_result(result);
 
-      CassIterator* iterator
-          = cass_iterator_from_map(
-              cass_row_get_column(row, 0));
+    while(cass_iterator_next(rows)) {
+      CassUuid id;
+      char id_str[CASS_UUID_STRING_LENGTH];
+      const CassRow* row = cass_iterator_get_row(rows);
+      const CassValue* id_value = cass_row_get_column_by_name(row, "id");
+      const CassValue* item_value = cass_row_get_column_by_name(row, "item");
+      CassIterator* fields = cass_iterator_from_user_type(item_value);
 
-      while (cass_iterator_next(iterator)) {
-        const char* key;
-        size_t key_length;
-        cass_int32_t value;
-        cass_value_get_string(cass_iterator_get_map_key(iterator), &key, &key_length);
-        cass_value_get_int32(cass_iterator_get_map_value(iterator), &value);
-        printf("item: '%.*s' : %d \n", (int)key_length, key, value);
+      cass_value_get_uuid(id_value, &id);
+      cass_uuid_string(id, id_str);
+
+      printf("id %s ", id_str);
+
+      while(cass_iterator_next(fields)) {
+        const char* field_name;
+        size_t field_name_length;
+        const CassValue* field_value = NULL;
+        cass_iterator_get_user_type_field_name(fields, &field_name, &field_name_length);
+        field_value = cass_iterator_get_user_type_field_value(fields);
+        printf("%.*s ", (int)field_name_length, field_name);
+
+        if (cass_value_type(field_value) == CASS_VALUE_TYPE_VARCHAR) {
+          const char* text;
+          size_t text_length;
+          cass_value_get_string(field_value, &text, &text_length);
+          printf("\"%.*s\" ", (int)text_length, text);
+        } else if (cass_value_type(field_value) == CASS_VALUE_TYPE_INT) {
+          cass_int32_t i;
+          cass_value_get_int32(field_value, &i);
+          printf("%d ", i);
+        } else {
+          printf("<invalid> ");
+        }
       }
-      cass_iterator_free(iterator);
+
+      printf("\n");
     }
 
     cass_result_free(result);
+    cass_iterator_free(rows);
   }
 
   cass_future_free(future);
@@ -168,7 +195,7 @@ int main() {
   CassSession* session = cass_session_new();
   CassFuture* close_future = NULL;
 
-  const Pair items[] = { { "apple", 1 }, { "orange", 2 }, { "banana", 3 }, { "mango", 4 }, { NULL, 0 } };
+  uuid_gen = cass_uuid_gen_new();
 
   if (connect_session(session, cluster) != CASS_OK) {
     cass_cluster_free(cluster);
@@ -178,16 +205,16 @@ int main() {
 
   execute_query(session,
                 "CREATE KEYSPACE examples WITH replication = { \
-                'class': 'SimpleStrategy', 'replication_factor': '3' };");
+                           'class': 'SimpleStrategy', 'replication_factor': '3' }");
 
   execute_query(session,
-                "CREATE TABLE examples.maps (key text, \
-                items map<text, int>, \
-                PRIMARY KEY (key))");
+                "CREATE TYPE examples.item (street text, city text, zip int)");
 
+  execute_query(session,
+                "CREATE TABLE examples.udt (id timeuuid, item frozen<item>, PRIMARY KEY(id))");
 
-  insert_into_maps(session, "test", items);
-  select_from_maps(session, "test");
+  insert_into_udt(session);
+  select_from_udt(session);
 
   close_future = cass_session_close(session);
   cass_future_wait(close_future);
@@ -195,6 +222,8 @@ int main() {
 
   cass_cluster_free(cluster);
   cass_session_free(session);
+
+  cass_uuid_gen_free(uuid_gen);
 
   return 0;
 }

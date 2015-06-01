@@ -17,6 +17,7 @@
 #include "abstract_data.hpp"
 
 #include "collection.hpp"
+#include "user_type_value.hpp"
 
 namespace cass {
 
@@ -35,6 +36,12 @@ CassError AbstractData::set(size_t index, CassCustom custom) {
   Buffer buf(custom.output_size);
   buffers_[index] = buf;
   *(custom.output) = reinterpret_cast<uint8_t*>(buf.data());
+  return CASS_OK;
+}
+
+CassError AbstractData::set(size_t index, const UserTypeValue* value) {
+  CASS_CHECK_INDEX_AND_TYPE(index, value);
+  buffers_[index] = value->encode_with_length();
   return CASS_OK;
 }
 

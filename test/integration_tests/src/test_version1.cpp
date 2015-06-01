@@ -113,13 +113,13 @@ BOOST_AUTO_TEST_CASE(prepared)
   cass_statement_bind_int32(statement.get(), 1, 99);
   cass_statement_bind_string(statement.get(), 2, "abc");
 
-  test_utils::CassCollectionPtr list(cass_collection_new(session, CASS_COLLECTION_TYPE_LIST, 3));
+  test_utils::CassCollectionPtr list(cass_collection_new_count(session, CASS_COLLECTION_TYPE_LIST, 3));
   cass_collection_append_int32(list.get(), 0);
   cass_collection_append_int32(list.get(), 1);
   cass_collection_append_int32(list.get(), 2);
   cass_statement_bind_collection(statement.get(), 3, list.get());
 
-  test_utils::CassCollectionPtr set(cass_collection_new(session, CASS_COLLECTION_TYPE_SET, 3));
+  test_utils::CassCollectionPtr set(cass_collection_new_count(session, CASS_COLLECTION_TYPE_SET, 3));
   cass_collection_append_string(set.get(), "d");
   cass_collection_append_string(set.get(), "e");
   cass_collection_append_string(set.get(), "f");

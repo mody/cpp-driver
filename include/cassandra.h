@@ -273,11 +273,26 @@ typedef struct CassRow_ CassRow;
 typedef struct CassValue_ CassValue;
 
 /**
+ * @struct CassDataType
+ *
+ * A data type used to describe a value, collection or
+ * user defiend type.
+ */
+typedef struct CassDataType_ CassDataType;
+
+/**
  * @struct CassCollection
  *
  *  A collection of primitive values.
  */
 typedef struct CassCollection_ CassCollection;
+
+/**
+ * @struct CassUserType
+ *
+ *  A user defined type.
+ */
+typedef struct CassUserType_ CassUserType;
 
 /**
  * @struct CassSsl
@@ -415,7 +430,8 @@ typedef enum CassIteratorType_ {
   CASS_ITERATOR_TYPE_COLLECTION,
   CASS_ITERATOR_TYPE_MAP,
   CASS_ITERATOR_TYPE_SCHEMA_META,
-  CASS_ITERATOR_TYPE_SCHEMA_META_FIELD
+  CASS_ITERATOR_TYPE_SCHEMA_META_FIELD,
+  CASS_ITERATOR_TYPE_USER_TYPE
 } CassIteratorType;
 
 typedef enum CassSchemaMetaType_ {
@@ -2159,6 +2175,22 @@ cass_statement_bind_collection(CassStatement* statement,
 
 
 /**
+ * Bind a user defined type to a query or bound statement at the
+ * specified index.
+ *
+ * @public @memberof CassStatement
+ *
+ * @param[in] statement
+ * @param[in] index
+ * @param[in] user_type The user type can be freed after this call.
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_statement_bind_user_type(CassStatement* statement,
+                              size_t index,
+                              const CassUserType* user_type);
+
+/**
  * Binds a null to all the values with the specified name.
  *
  * This can only be used with statements created by
@@ -2676,6 +2708,42 @@ cass_statement_bind_collection_by_name_n(CassStatement* statement,
                                          size_t name_length,
                                          const CassCollection* collection);
 
+/**
+ * Bind a user defined type to a query or bound statement with the
+ * specified name.
+ *
+ * @public @memberof CassStatement
+ *
+ * @param[in] statement
+ * @param[in] index
+ * @param[in] user_type The user type can be freed after this call.
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_statement_bind_user_type_by_name(CassStatement* statement,
+                                      const char* name,
+                                      const CassUserType* user_type);
+
+/**
+ * Same as cass_statement_bind_user_type_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassStatement
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] user_type
+ * @return same as cass_statement_bind_user_type_by_name()
+ *
+ * @see cass_statement_bind_collection_by_name()
+ */
+CASS_EXPORT CassError
+cass_statement_bind_user_type_by_name_n(CassStatement* statement,
+                                        const char* name,
+                                        size_t name_length,
+                                        const CassUserType* user_type);
+
 /***********************************************************************************
  *
  * Prepared
@@ -2784,8 +2852,56 @@ cass_batch_add_statement(CassBatch* batch,
  */
 CASS_EXPORT CassCollection*
 cass_collection_new(CassSession* session,
-                    CassCollectionType type,
-                    size_t item_count);
+                    CassCollectionType type);
+
+/**
+ * Same as cass_collection_new(), but with a count for the appoximate number
+ * of items in the collection.
+ *
+ * @public @memberof CassCollection
+ *
+ * @param[in] session
+ * @param[in] type
+ * @param[in] item_count The approximate number of items in the collection.
+ * @return Returns a collection that must be freed.
+ *
+ * @see cass_collection_new();
+ */
+CASS_EXPORT CassCollection*
+cass_collection_new_count(CassSession* session,
+                          CassCollectionType type,
+                          size_t item_count);
+
+/**
+ * Creates a new collection from an existing data type.
+ *
+ * @public @memberof CassCollection
+ *
+ * @param[in] session
+ * @param[in] data_type
+ * @return Returns a collection that must be freed.
+ *
+ * @see cass_collection_free()
+ */
+CASS_EXPORT CassCollection*
+cass_collection_new_from_data_type(const CassDataType* data_type);
+
+/**
+ * Same as cass_collection_new_from_data_type(), but with a count for the
+ * appoximate number of items in the collection.
+ *
+ * @public @memberof CassCollection
+ *
+ * @param[in] session
+ * @param[in] data_type
+ * @param[in] item_count The approximate number of items in the collection.
+ * @return Returns a collection that must be freed.
+ *
+ * @see cass_collection_new();
+ */
+CASS_EXPORT CassCollection*
+cass_collection_new_from_data_type_count(const CassDataType* data_type,
+                                         size_t item_count);
 
 /**
  * Frees a collection instance.
@@ -2955,10 +3071,837 @@ cass_collection_append_decimal(CassCollection* collection,
                                size_t varint_size,
                                cass_int32_t scale);
 
-
+/**
+ * Appends a "list", "map" or "set" to the collection.
+ *
+ * @public @memberof CassCollection
+ *
+ * @param[in] collection
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
 CASS_EXPORT CassError
 cass_collection_append_collection(CassCollection* collection,
                                   const CassCollection* value);
+
+/**
+ * Appends a "udt" to the collection.
+ *
+ * @public @memberof CassCollection
+ *
+ * @param[in] collection
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_collection_append_user_type(CassCollection* collection,
+                                 const CassUserType* value);
+
+/***********************************************************************************
+ *
+ * Data Type
+ *
+ ***********************************************************************************/
+
+CASS_EXPORT CassDataType*
+cass_data_type_new(CassSession* session,
+                   CassValueType type);
+
+CASS_EXPORT CassDataType*
+cass_data_type_new_udt(CassSession* session,
+                       const char* keyspace,
+                       const char* type_name,
+                       size_t field_count);
+
+CASS_EXPORT CassDataType*
+cass_data_type_new_udt_n(CassSession* session,
+                         const char* keyspace,
+                         size_t keyspace_length,
+                         const char* type_name,
+                         size_t type_name_length,
+                         size_t field_count);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_collection(const CassCollection* collection);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_user_type(const CassUserType* user_type);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_value(const CassValue* value);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_sub_type(const CassDataType* data_type,
+                                 size_t index);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_sub_type_by_name(const CassDataType* data_type,
+                                         const char* name);
+
+CASS_EXPORT const CassDataType*
+cass_data_type_new_from_sub_type_by_name_n(const CassDataType* data_type,
+                                           const char* name,
+                                           size_t name_length);
+
+CASS_EXPORT CassValueType
+cass_data_type_type(const CassDataType* data_type);
+
+CASS_EXPORT CassValueType
+cass_data_type_sub_type(const CassDataType* data_type,
+                        size_t index);
+
+CASS_EXPORT CassError
+cass_data_type_name(const CassDataType* data_type,
+                    const char** name,
+                    size_t* name_length);
+
+CASS_EXPORT CassError
+cass_data_type_keyspace(const CassDataType* data_type,
+                        const char** keyspace,
+                        size_t* keyspace_length);
+
+CASS_EXPORT CassValueType
+cass_data_type_sub_type_by_name(const CassDataType* data_type,
+                                const char* name);
+
+CASS_EXPORT CassValueType
+cass_data_type_sub_type_by_name_n(const CassDataType* data_type,
+                                  const char* name,
+                                  size_t name_length);
+
+CASS_EXPORT CassError
+cass_data_type_sub_type_name(const CassDataType* data_type,
+                             size_t index,
+                             const char** name,
+                             size_t* name_length);
+
+CASS_EXPORT CassError
+cass_data_type_add_sub_type(CassDataType* data_type,
+                            const CassDataType* type);
+
+CASS_EXPORT CassError
+cass_data_type_add_sub_type_by_name(CassDataType* data_type,
+                                      const char* name,
+                                      const CassDataType* type);
+
+CASS_EXPORT CassError
+cass_data_type_add_sub_type_by_name_n(CassDataType* data_type,
+                                        const char* name,
+                                        size_t name_length,
+                                        const CassDataType* type);
+
+CASS_EXPORT void
+cass_data_type_free(CassDataType* data_type);
+
+/***********************************************************************************
+ *
+ * User Type
+ *
+ ***********************************************************************************/
+
+/**
+ * Creates a new user defined type from existing data type;
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] session
+ * @param[in] data_type
+ * @return Returns a user defined type that must be freed. NULL is returned if
+ * the data type is not a user defined type.
+ *
+ * @see cass_user_type_free()
+ */
+CASS_EXPORT CassUserType*
+cass_user_type_new_from_data_type(const CassDataType* data_type);
+
+/**
+ * Creates a new user defined type from schema metadata.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] session
+ * @param[in] keyspace
+ * @param[in] type_name
+ * @return Returns a user defined type that must be freed. NULL is returned if
+ * a type doesn't exist for the "keyspace" and "type_name".
+ *
+ * @see cass_user_type_free()
+ */
+CASS_EXPORT CassUserType*
+cass_user_type_new_from_schema(CassSession* session,
+                               const char* keyspace,
+                               const char* type_name);
+
+/**
+ * Same as cass_user_type_new_from_schema(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] session
+ * @param[in] keyspace
+ * @param[in] keyspace_length
+ * @param[in] type_name
+ * @param[in] type_name_length
+ * @return Returns a user defined type that must be freed. NULL is returned if
+ * a type doesn't exist for the "keyspace" and "type_name".
+ *
+ * @see cass_user_type_free()
+ */
+CASS_EXPORT CassUserType*
+cass_user_type_new_from_schema_n(CassSession* session,
+                                 const char* keyspace,
+                                 size_t keyspace_length,
+                                 const char* type_name,
+                                 size_t type_name_length);
+
+/**
+ * Sets an "int" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int32(CassUserType* user_type,
+                         size_t index,
+                         cass_int32_t value);
+
+/**
+ * Sets an "int" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int32_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_int32_t value);
+
+/**
+ * Same as cass_user_type_set_int32_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_int32_by_name()
+ *
+ * @see cass_user_type_set_int32_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int32_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_int32_t value);
+
+/**
+ * Sets an "bigint, "counter", or "timestamp" in a user defined type
+ * at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int64(CassUserType* user_type,
+                         size_t index,
+                         cass_int64_t value);
+
+/**
+ * Sets an "bigint, "counter", or "timestamp" in a user defined type
+ * at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int64_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_int64_t value);
+
+/**
+ * Same as cass_user_type_set_int64_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_int64_by_name()
+ *
+ * @see cass_user_type_set_int64_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_int64_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_int64_t value);
+
+/**
+ * Sets a "float" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_float(CassUserType* user_type,
+                         size_t index,
+                         cass_float_t value);
+
+/**
+ * Sets a "float" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_float_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_float_t value);
+
+/**
+ * Same as cass_user_type_set_float_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_float_by_name()
+ *
+ * @see cass_user_type_set_float_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_float_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_float_t value);
+
+/**
+ * Sets an "double" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_double(CassUserType* user_type,
+                         size_t index,
+                         cass_double_t value);
+
+/**
+ * Sets an "double" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_double_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_double_t value);
+
+/**
+ * Same as cass_user_type_set_double_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_double_by_name()
+ *
+ * @see cass_user_type_set_double_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_double_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_double_t value);
+
+/**
+ * Sets a "boolean" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bool(CassUserType* user_type,
+                         size_t index,
+                         cass_bool_t value);
+
+/**
+ * Sets a "boolean" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bool_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_bool_t value);
+
+/**
+ * Same as cass_user_type_set_double_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_double_by_name()
+ *
+ * @see cass_user_type_set_double_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bool_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_bool_t value);
+
+
+/**
+ * Sets a "ascii", "text" or "varchar" in a user defined type at the
+ * specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_string(CassUserType* user_type,
+                          size_t index,
+                          const char* value);
+
+/**
+ * Same as cass_user_type_set_string(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @param[in] value_length
+ * @return same as cass_user_type_set_string()
+ *
+ * @see cass_user_type_set_string()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_string_n(CassUserType* user_type,
+                            size_t index,
+                            const char* value,
+                            size_t value_length);
+
+/**
+ * Sets a "ascii", "text" or "varchar" in a user defined type at the
+ * specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_string_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 const char* value);
+
+/**
+ * Same as cass_user_type_set_string_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_string_by_name()
+ *
+ * @see cass_user_type_set_string_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_string_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   const char* value,
+                                   size_t value_length);
+
+/**
+ * Sets a "blob" or "varint" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bytes(CassUserType* user_type,
+                         size_t index,
+                         const cass_byte_t* value,
+                         size_t value_size);
+
+/**
+ * Sets a "blob" or "varint" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bytes_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 const cass_byte_t* value,
+                                 size_t value_size);
+
+/**
+ * Same as cass_user_type_set_bytes_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_bytes_by_name()
+ *
+ * @see cass_user_type_set_bytes_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_bytes_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   const cass_byte_t* value,
+                                   size_t value_size);
+
+/**
+ * Sets a "uuid" or "timeuuid" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_uuid(CassUserType* user_type,
+                         size_t index,
+                         CassUuid value);
+
+/**
+ * Sets a "uuid" or "timeuuid" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_uuid_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 CassUuid value);
+
+/**
+ * Same as cass_user_type_set_uuid_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_uuid_by_name()
+ *
+ * @see cass_user_type_set_uuid_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_uuid_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   CassUuid value);
+
+/**
+ * Sets a "inet" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_inet(CassUserType* user_type,
+                         size_t index,
+                         CassInet value);
+
+/**
+ * Sets a "inet" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_inet_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 CassInet value);
+
+/**
+ * Same as cass_user_type_set_inet_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_inet_by_name()
+ *
+ * @see cass_user_type_set_inet_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_inet_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   CassInet value);
+
+/**
+ * Sets an "decimal" in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_decimal(CassUserType* user_type,
+                           size_t index,
+                           const cass_byte_t* varint,
+                           size_t varint_size,
+                           int scale);
+
+/**
+ * Sets "decimal" in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_decimal_by_name(CassUserType* user_type,
+                                   const char* name,
+                                   const cass_byte_t* varint,
+                                   size_t varint_size,
+                                   int scale);
+
+/**
+ * Same as cass_user_type_set_decimal_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_decimal_by_name()
+ *
+ * @see cass_user_type_set_decimal_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_decimal_by_name_n(CassUserType* user_type,
+                                     const char* name,
+                                     size_t name_length,
+                                     const cass_byte_t* varint,
+                                     size_t varint_size,
+                                     int scale);
+
+/**
+ * Sets a "list", "map" or "set" in a user defined type at the
+ * specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_collection(CassUserType* user_type,
+                              size_t index,
+                              const CassCollection* value);
+
+/**
+ * Sets a "list", "map" or "set" in a user defined type at the
+ * specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_collection_by_name(CassUserType* user_type,
+                                      const char* name,
+                                      const CassCollection* value);
+
+/**
+ * Same as cass_user_type_set_collection_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_collection_by_name()
+ *
+ * @see cass_user_type_set_collection_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_collection_by_name_n(CassUserType* user_type,
+                                        const char* name,
+                                        size_t name_length,
+                                        const CassCollection* value);
+
+/**
+ * Sets a user defined type in a user defined type at the specified index.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] index
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_user_type(CassUserType* user_type,
+                             size_t index,
+                             const CassUserType* value);
+
+/**
+ * Sets a user defined type in a user defined type at the specified name.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ * @param[in] name
+ * @param[in] value
+ * @return CASS_OK if successful, otherwise an error occurred.
+ */
+CASS_EXPORT CassError
+cass_user_type_set_user_type_by_name(CassUserType* user_type,
+                                     const char* name,
+                                     const CassUserType* value);
+
+/**
+ * Same as cass_user_type_set_user_type_by_name(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] statement
+ * @param[in] name
+ * @param[in] name_length
+ * @param[in] value
+ * @return same as cass_user_type_set_user_type_by_name()
+ *
+ * @see cass_user_type_set_user_type_by_name()
+ */
+CASS_EXPORT CassError
+cass_user_type_set_user_type_by_name_n(CassUserType* user_type,
+                                       const char* name,
+                                       size_t name_length,
+                                       const CassUserType* value);
+
+/**
+ * Frees a user defined type instance.
+ *
+ * @public @memberof CassUserType
+ *
+ * @param[in] user_type
+ */
+CASS_EXPORT void
+cass_user_type_free(CassUserType* user_type);
 
 /***********************************************************************************
  *
@@ -3140,6 +4083,21 @@ CASS_EXPORT CassIterator*
 cass_iterator_from_map(const CassValue* value);
 
 /**
+ * Creates a new iterator for the specified user defined type. This can be
+ * used to iterate over fields in a user defined type.
+ *
+ * @public @memberof CassValue
+ *
+ * @param[in] value
+ * @return A new iterator that must be freed. NULL returned if the
+ * value is not a user defined type.
+ *
+ * @see cass_iterator_free()
+ */
+CASS_EXPORT CassIterator*
+cass_iterator_from_user_type(const CassValue* value);
+
+/**
  * Creates a new iterator for the specified schema.
  * This can be used to iterate over keyspace entries.
  *
@@ -3279,6 +4237,38 @@ cass_iterator_get_map_key(CassIterator* iterator);
  */
 CASS_EXPORT const CassValue*
 cass_iterator_get_map_value(CassIterator* iterator);
+
+/**
+ * Gets the field name at the user type defined iterator's current position.
+ *
+ * Calling cass_iterator_next() will invalidate the previous
+ * name returned by this method.
+ *
+ * @public @memberof CassIterator
+ *
+ * @param[in] iterator
+ * @param[out] name
+ * @param[out] name_length
+ * @return CASS_OK if successful, otherwise error occurred
+ */
+CASS_EXPORT CassError
+cass_iterator_get_user_type_field_name(CassIterator* iterator,
+                                       const char** name,
+                                       size_t* name_length);
+
+/**
+ * Gets the field value at the user type defined iterator's current position.
+ *
+ * Calling cass_iterator_next() will invalidate the previous
+ * value returned by this method.
+ *
+ * @public @memberof CassIterator
+ *
+ * @param[in] iterator
+ * @return A value
+ */
+CASS_EXPORT const CassValue*
+cass_iterator_get_user_type_field_value(CassIterator* iterator);
 
 /**
  * Gets the schema metadata entry at the iterator's current

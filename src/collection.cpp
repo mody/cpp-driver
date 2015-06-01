@@ -18,14 +18,21 @@
 
 #include "external_types.hpp"
 #include "macros.hpp"
+#include "user_type_value.hpp"
 
 #include <string.h>
 
 extern "C" {
 
 CassCollection* cass_collection_new(CassSession* session,
-                                    CassCollectionType type,
-                                    size_t item_count) {
+                                    CassCollectionType type) {
+  return CassCollection::to(new cass::Collection(session->protocol_version(),
+                                                 type));
+}
+
+CassCollection* cass_collection_new_count(CassSession* session,
+                                          CassCollectionType type,
+                                          size_t item_count) {
   return CassCollection::to(new cass::Collection(session->protocol_version(),
                                                  type,
                                                  item_count));
@@ -74,6 +81,12 @@ CassError cass_collection_append_string_n(CassCollection* collection,
 namespace cass {
 
 CassError Collection::append(const Collection* value) {
+  CASS_COLLECTION_CHECK_TYPE(value);
+  items_.push_back(value->encode());
+  return CASS_OK;
+}
+
+CassError Collection::append(const UserTypeValue* value) {
   CASS_COLLECTION_CHECK_TYPE(value);
   items_.push_back(value->encode());
   return CASS_OK;
