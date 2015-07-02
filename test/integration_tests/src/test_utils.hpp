@@ -30,6 +30,7 @@
 #include <boost/thread/lock_guard.hpp>
 
 #include <openssl/bn.h>
+#include <openssl/crypto.h>
 
 #include <uv.h>
 
@@ -174,8 +175,7 @@ private:
     if (value) {
       char * decimal = BN_bn2dec(value);
       result = std::string(decimal);
-      delete decimal;
-      decimal = NULL;
+      OPENSSL_free(decimal);
 
       //Normalize - strip leading zeros
       for (unsigned int n = 0; n < result.size(); ++n) {
